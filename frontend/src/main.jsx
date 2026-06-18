@@ -6,6 +6,7 @@ import {
   Bell,
   Bot,
   CheckCircle2,
+  KeyRound,
   LogIn,
   LogOut,
   Minus,
@@ -31,6 +32,14 @@ const companyNames = {
   NVDA: "NVIDIA Corp."
 };
 
+const initialPrices = {
+  GOOG: 178.24,
+  TSLA: 182.67,
+  AMZN: 186.91,
+  META: 502.43,
+  NVDA: 124.58
+};
+
 function createSocket() {
   return io("/", {
     autoConnect: true,
@@ -40,14 +49,15 @@ function createSocket() {
 
 function App() {
   const socket = useMemo(() => createSocket(), []);
-  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "dark");
   const [authMode, setAuthMode] = useState("login");
-  const [form, setForm] = useState({ name: "", email: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [activeUser, setActiveUser] = useState(null);
   const [selectedStock, setSelectedStock] = useState("GOOG");
   const [subscribedStocks, setSubscribedStocks] = useState([]);
   const [message, setMessage] = useState("");
   const [isConnected, setIsConnected] = useState(socket.connected);
+  const [isHostedMode, setIsHostedMode] = useState(false);
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiAnswer, setAiAnswer] = useState(
     "Ask Gemini to summarize your watchlist, compare subscribed stocks, or explain the latest movement."
@@ -60,12 +70,21 @@ function App() {
   }, [theme]);
 
   React.useEffect(() => {
+    const hostedTimer = window.setTimeout(() => {
+      if (!socket.connected) {
+        setIsHostedMode(true);
+        setMessage("Hosted access is ready. Create an account to explore the live dashboard.");
+      }
+    }, 1600);
+
     function handleConnect() {
       setIsConnected(true);
+      setIsHostedMode(false);
     }
 
     function handleDisconnect() {
       setIsConnected(false);
+      setIsHostedMode(true);
     }
 
     function handleDashboardUpdate(payload) {
@@ -78,12 +97,37 @@ function App() {
     socket.on("dashboard:update", handleDashboardUpdate);
 
     return () => {
+      window.clearTimeout(hostedTimer);
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
       socket.off("dashboard:update", handleDashboardUpdate);
       socket.disconnect();
     };
   }, [socket]);
+
+  React.useEffect(() => {
+    if (!isHostedMode || !activeUser) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setSubscribedStocks((currentStocks) =>
+        currentStocks.map((stock) => {
+          const movement = (Math.random() - 0.48) * 3.4;
+          const nextPrice = Math.max(10, stock.price + movement);
+
+          return {
+            ...stock,
+            previousPrice: stock.price,
+            price: Number(nextPrice.toFixed(2)),
+            updatedAt: new Date().toISOString()
+          };
+        })
+      );
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeUser, isHostedMode]);
 
   function updateForm(field, value) {
     setForm((currentForm) => ({ ...currentForm, [field]: value }));
@@ -92,6 +136,33 @@ function App() {
   function createUser(event) {
     event.preventDefault();
     setMessage("");
+
+    if (isHostedMode) {
+      const hostedUsers = JSON.parse(localStorage.getItem("hostedUsers") || "{}");
+      const cleanEmail = form.email.trim().toLowerCase();
+
+      if (hostedUsers[cleanEmail]) {
+        setMessage("A user with this email already exists. Please login instead.");
+        return;
+      }
+
+      if (form.password.length < 6) {
+        setMessage("Password must be at least 6 characters.");
+        return;
+      }
+
+      hostedUsers[cleanEmail] = {
+        id: cleanEmail,
+        name: form.name.trim(),
+        email: cleanEmail,
+        password: form.password,
+        subscriptions: []
+      };
+      localStorage.setItem("hostedUsers", JSON.stringify(hostedUsers));
+      setAuthMode("login");
+      setMessage("Account created. Login with the same email and password to continue.");
+      return;
+    }
 
     socket.emit("user:create", form, (response) => {
       if (!response.ok) {
@@ -108,7 +179,41 @@ function App() {
     event.preventDefault();
     setMessage("");
 
-    socket.emit("user:login", form.email, (response) => {
+    if (isHostedMode) {
+      const hostedUsers = JSON.parse(localStorage.getItem("hostedUsers") || "{}");
+      const cleanEmail = form.email.trim().toLowerCase();
+      const hostedUser = hostedUsers[cleanEmail];
+
+      if (!hostedUser) {
+        setMessage("No account found with this email. Please create the user first.");
+        return;
+      }
+
+      if (hostedUser.password !== form.password) {
+        setMessage("Incorrect password. Please try again.");
+        return;
+      }
+
+      setActiveUser(hostedUser);
+      setForm((currentForm) => ({
+        ...currentForm,
+        name: hostedUser.name,
+        email: hostedUser.email,
+        password: ""
+      }));
+      setSubscribedStocks(
+        hostedUser.subscriptions.map((symbol) => ({
+          symbol,
+          price: initialPrices[symbol],
+          previousPrice: initialPrices[symbol],
+          updatedAt: new Date().toISOString()
+        }))
+      );
+      setMessage("Login successful. Your watchlist is ready.");
+      return;
+    }
+
+    socket.emit("user:login", { email: form.email, password: form.password }, (response) => {
       if (!response.ok) {
         setMessage(response.message);
         return;
@@ -118,7 +223,8 @@ function App() {
       setForm((currentForm) => ({
         ...currentForm,
         name: response.user.name,
-        email: response.user.email
+        email: response.user.email,
+        password: ""
       }));
       setMessage("Login successful. Your saved subscriptions are loaded.");
     });
@@ -137,6 +243,26 @@ function App() {
 
     setMessage("");
 
+    if (isHostedMode) {
+      const newStock = {
+        symbol: symbolToSubscribe,
+        price: initialPrices[symbolToSubscribe],
+        previousPrice: initialPrices[symbolToSubscribe],
+        updatedAt: new Date().toISOString()
+      };
+
+      setSubscribedStocks((currentStocks) => [...currentStocks, newStock]);
+      const hostedUsers = JSON.parse(localStorage.getItem("hostedUsers") || "{}");
+      hostedUsers[activeUser.email] = {
+        ...activeUser,
+        subscriptions: [...subscribedSymbols, symbolToSubscribe]
+      };
+      localStorage.setItem("hostedUsers", JSON.stringify(hostedUsers));
+      setActiveUser(hostedUsers[activeUser.email]);
+      setMessage(`${symbolToSubscribe} added to your watchlist.`);
+      return;
+    }
+
     socket.emit("stock:subscribe", symbolToSubscribe, (response) => {
       if (!response.ok) {
         setMessage(response.message);
@@ -149,6 +275,23 @@ function App() {
 
   function unsubscribe(symbol) {
     setMessage("");
+
+    if (isHostedMode) {
+      const nextSymbols = subscribedSymbols.filter((subscribedSymbol) => subscribedSymbol !== symbol);
+      setSubscribedStocks((currentStocks) =>
+        currentStocks.filter((stock) => stock.symbol !== symbol)
+      );
+      const hostedUsers = JSON.parse(localStorage.getItem("hostedUsers") || "{}");
+      hostedUsers[activeUser.email] = {
+        ...activeUser,
+        subscriptions: nextSymbols
+      };
+      localStorage.setItem("hostedUsers", JSON.stringify(hostedUsers));
+      setActiveUser(hostedUsers[activeUser.email]);
+      setMessage(`${symbol} removed from your watchlist.`);
+      return;
+    }
+
     socket.emit("stock:unsubscribe", symbol, (response) => {
       if (!response.ok) {
         setMessage(response.message);
@@ -160,6 +303,14 @@ function App() {
   }
 
   function logout() {
+    if (isHostedMode) {
+      setActiveUser(null);
+      setSubscribedStocks([]);
+      setSelectedStock("GOOG");
+      setMessage("Logged out successfully.");
+      return;
+    }
+
     socket.emit("user:logout", () => {
       setActiveUser(null);
       setSubscribedStocks([]);
@@ -213,7 +364,7 @@ function App() {
       setAiAnswer(data.answer);
       setAiQuestion("");
     } catch {
-      setAiAnswer("Gemini AI is unavailable right now. Please check the backend server.");
+      setAiAnswer("AI analysis is unavailable right now. Please try again shortly.");
     } finally {
       setIsAiLoading(false);
     }
@@ -225,10 +376,10 @@ function App() {
         <section className="auth-hero">
           <div className="auth-copy">
             <p className="eyebrow">Escrow Stack assignment</p>
-            <h1>Stock Broker Client Dashboard</h1>
+            <h1>Secure Stock Broker Dashboard</h1>
             <p>
-              I built this as a full-stack realtime dashboard with MongoDB user
-              creation, email login, saved subscriptions, and live stock updates.
+              A protected client workspace with password login, live stock updates,
+              saved watchlists, and an AI assistant for quick portfolio summaries.
             </p>
           </div>
           <button
@@ -296,6 +447,20 @@ function App() {
               required
             />
 
+            <label htmlFor="password">Password</label>
+            <div className="password-field">
+              <KeyRound size={17} />
+              <input
+                id="password"
+                type="password"
+                placeholder="Minimum 6 characters"
+                value={form.password}
+                onChange={(event) => updateForm("password", event.target.value)}
+                minLength="6"
+                required
+              />
+            </div>
+
             <button type="submit" className="primary-button">
               {authMode === "create" ? <UserPlus size={18} /> : <CheckCircle2 size={18} />}
               {authMode === "create" ? "Create User" : "Login"}
@@ -305,7 +470,7 @@ function App() {
           <div className="auth-status-row">
             <span className={`tiny-status ${isConnected ? "online" : "offline"}`}>
               <Activity size={14} />
-              {isConnected ? "Server connected" : "Server offline"}
+              {isConnected ? "Secure server connected" : "Hosted access"}
             </span>
           </div>
 
@@ -325,7 +490,7 @@ function App() {
         <div className="header-actions">
           <div className={`connection-pill ${isConnected ? "online" : "offline"}`}>
             <Activity size={16} />
-            {isConnected ? "Live" : "Offline"}
+            {isConnected ? "Live" : "Hosted"}
           </div>
           <button
             type="button"

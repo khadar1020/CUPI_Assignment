@@ -43,9 +43,9 @@ export function registerDashboardSocket(io) {
       }
     });
 
-    socket.on("user:login", async (email, callback) => {
+    socket.on("user:login", async (payload, callback) => {
       try {
-        const result = await loginUser(email);
+        const result = await loginUser(payload || {});
         if (!result.ok) {
           callback?.(result);
           return;

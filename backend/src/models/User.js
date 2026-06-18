@@ -15,6 +15,10 @@ const userSchema = new mongoose.Schema(
       unique: true,
       required: true
     },
+    passwordHash: {
+      type: String,
+      required: true
+    },
     subscriptions: {
       type: [String],
       enum: SUPPORTED_STOCKS,

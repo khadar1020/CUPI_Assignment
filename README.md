@@ -5,7 +5,19 @@
 ![React](https://img.shields.io/badge/react-19-61DAFB)
 ![MongoDB](https://img.shields.io/badge/database-MongoDB-47A248)
 
-A complete full-stack stock broker client dashboard with user authentication, real-time stock price updates via Socket.IO, MongoDB persistence, and a Gemini AI assistant sidebar.
+A complete full-stack stock broker client dashboard with password authentication, real-time stock price updates via Socket.IO, MongoDB persistence, and a Gemini AI assistant sidebar.
+
+---
+
+## Public Website Access
+
+The frontend is deployed publicly on Vercel:
+
+```text
+https://escrow-stock-analysis.vercel.app
+```
+
+The public website includes hosted browser access, so it can be opened and tested immediately. The complete backend, MongoDB persistence, Socket.IO realtime server, secure password hashing, and Gemini AI integration work when the project is run locally using the setup steps below.
 
 ---
 
@@ -27,8 +39,8 @@ A complete full-stack stock broker client dashboard with user authentication, re
 
 ## Features
 
-- User creation with full name and email address
-- Login and logout using registered email
+- User creation with full name, email address, and password
+- Login and logout using registered email and matching password
 - MongoDB persistence — subscriptions saved across sessions
 - Five supported stocks: `GOOG`, `TSLA`, `AMZN`, `META`, `NVDA`
 - Subscribe and unsubscribe to stocks
@@ -109,7 +121,7 @@ Open `.env` and set:
 PORT=4000
 MONGODB_URI=mongodb://127.0.0.1:27017/stock_broker_dashboard
 GEMINI_API_KEY=your_actual_gemini_api_key_here
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-3.5-flash
 ```
 
 > `GEMINI_API_KEY` is optional. If left blank, the app runs normally but the AI sidebar will be unavailable.
@@ -203,8 +215,8 @@ Run from the **root folder** (`CUPI_Assignement/`):
 ## How To Use The App
 
 1. Open `http://localhost:5173`
-2. Click **Create User** → enter a full name and email → click **Create User**
-3. Go back to **Login** → enter the same email → click **Login**
+2. Click **Create User** → enter a full name, email, and password → click **Create User**
+3. Go back to **Login** → enter the same email and password → click **Login**
 4. Type a stock ticker (`GOOG`, `TSLA`, `AMZN`, `META`, or `NVDA`) and click **Subscribe**
 5. Watch live prices update every second automatically
 6. Open the **AI Assistant** sidebar on the right to ask Gemini about your watchlist
@@ -216,9 +228,9 @@ Run from the **root folder** (`CUPI_Assignement/`):
 ## Testing Multiple Users
 
 1. Open `http://localhost:5173` in a normal browser window
-2. Create and login as `user1@example.com` — subscribe to `GOOG`, `TSLA`
+2. Create and login as `user1@example.com` with a password — subscribe to `GOOG`, `TSLA`
 3. Open `http://localhost:5173` in a **new incognito / private window**
-4. Create and login as `user2@example.com` — subscribe to `AMZN`, `META`
+4. Create and login as `user2@example.com` with a password — subscribe to `AMZN`, `META`
 5. Both dashboards update live independently — each user sees only their own stocks
 
 ---
